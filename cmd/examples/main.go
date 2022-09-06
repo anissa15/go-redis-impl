@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	redis "github.com/anissa15/go-redis-impl"
@@ -25,10 +26,35 @@ func main() {
 
 	simpleScriptName := redis.ScriptName("simple script")
 	simpleScript := `
+	--[[
+		this simple script do:
+		- increment index key to get new index
+		- set data using index
+		- push index to list of index
+	]]
+
 	local indexKey = KEYS[1]
+	local dataKey = KEYS[2]
+	local indexListKey = KEYS[3]
+
+	local data = cjson.decode(ARGV[1])
+	
+	-- uncomment below to write data in redis log
+	-- redis.log(redis.LOG_NOTICE, "elements:", #data)
 	
 	-- get new index
 	local index = redis.call("INCR", indexKey)
+
+	-- add data
+	local n = table.getn(data)
+	for i=1,n,2 do
+		local k = data[i]
+		local v = data[i+1]
+		redis.call("HSET", dataKey .. index, k, v)
+	end
+
+	-- append index to list
+	redis.call("RPUSH", indexListKey, index)
 
 	return index
 	`
@@ -41,10 +67,20 @@ func main() {
 	fmt.Println("script hash:", r.GetScriptHash(simpleScriptName))
 
 	customerIndexKey := "index:customer"
+	customerDataKey := "customer#"
+	customerIndexListKey := "customer:ids"
+	type Customer struct {
+		Name string `json:"name"`
+		Age  int    `json:"age"`
+	}
 	for i := 0; i < 5; i++ {
-		// only 1 key for simpleScript
-		keys := []string{customerIndexKey}
-		res, err := r.EvalScript(ctx, simpleScriptName, keys)
+		keys := []string{customerIndexKey, customerDataKey, customerIndexListKey}
+		customer := []string{"name", fmt.Sprintf("cust %d", i), "age", fmt.Sprint(i)}
+		value, err := json.Marshal(customer)
+		if err != nil {
+			panic(err)
+		}
+		res, err := r.EvalScript(ctx, simpleScriptName, keys, value)
 		if err != nil {
 			panic(err)
 		}
@@ -52,10 +88,16 @@ func main() {
 	}
 
 	productIndexKey := "index:product"
+	productDataKey := "product#"
+	productIndexListKey := "product:ids"
 	for i := 0; i < 5; i++ {
-		// only 1 key for simpleScript
-		keys := []string{productIndexKey}
-		res, err := r.EvalScript(ctx, simpleScriptName, keys)
+		keys := []string{productIndexKey, productDataKey, productIndexListKey}
+		product := []string{"name", fmt.Sprintf("prod %d", i), "count", fmt.Sprint(i)}
+		value, err := json.Marshal(product)
+		if err != nil {
+			panic(err)
+		}
+		res, err := r.EvalScript(ctx, simpleScriptName, keys, value)
 		if err != nil {
 			panic(err)
 		}
