@@ -69,10 +69,6 @@ func main() {
 	customerIndexKey := "index:customer"
 	customerDataKey := "customer#"
 	customerIndexListKey := "customer:ids"
-	type Customer struct {
-		Name string `json:"name"`
-		Age  int    `json:"age"`
-	}
 	for i := 0; i < 5; i++ {
 		keys := []string{customerIndexKey, customerDataKey, customerIndexListKey}
 		customer := []string{"name", fmt.Sprintf("cust %d", i), "age", fmt.Sprint(i)}
